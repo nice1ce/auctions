@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Auction System</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<header>
+  <h1>Auction System</h1>
+  <p>Учет аукционов, лотов, ставок и продаж</p>
+</header>
+<main>
+  <section class="cards">
+    <div><b id="auction-count">0</b><span>аукционов</span></div>
+    <div><b id="lot-count">0</b><span>лотов</span></div>
+    <div><b id="sale-count">0</b><span>продаж</span></div>
+    <div><b id="revenue">0.00</b><span>выручка</span></div>
+  </section>
+  <section class="panel">
+    <h2>Создать аукцион</h2>
+    <form id="auction-form">
+      <input name="name" placeholder="Название" required>
+      <input name="start_at" type="datetime-local" required>
+      <input name="end_at" type="datetime-local" required>
+      <input name="description" placeholder="Описание">
+      <button>Создать</button>
+    </form>
+  </section>
+  <section class="panel"><h2>Аукционы</h2><div id="auctions"></div></section>
+  <section class="panel"><h2>Лоты</h2><div id="lots"></div></section>
+  <section class="panel"><h2>Продажи</h2><div id="sales"></div></section>
+  <div id="message"></div>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>
