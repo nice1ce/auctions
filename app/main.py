@@ -10,9 +10,12 @@ from app.models import Auction, Buyer, Bid, Lot, Sale, Seller
 from app.schemas import (
     AuctionCreate, AuctionRead, AuctionUpdate, BidCreate, BidRead,
     LotCreate, LotRead, LotUpdate, PersonCreate, PersonRead,
-    RevenueRead, SaleRead,
+    RevenueRead, SaleCreate, SaleRead,
 )
-from app.services import finish_auction, place_bid, sell_lot, start_auction
+from app.services import (
+    add_lot, cancel_auction, create_sale, edit_lot, finish_auction,
+    place_bid, remove_lot, start_auction,
+)
 
 settings = get_settings()
 app = FastAPI(title=settings.app_name, version=settings.app_version)
@@ -72,6 +75,8 @@ def delete_auction(auction_id: int, db: Session = Depends(get_db)):
     auction = db.get(Auction, auction_id)
     if not auction:
         raise HTTPException(404, "Аукцион не найден")
+    if db.scalar(select(Lot.id).where(Lot.auction_id == auction_id).limit(1)):
+        raise HTTPException(409, "Нельзя удалить аукцион, у которого уже есть лоты")
     db.delete(auction)
     db.commit()
 
@@ -88,6 +93,13 @@ def api_finish_auction(auction_id: int, db: Session = Depends(get_db)):
     if not auction:
         raise HTTPException(404, "Аукцион не найден")
     return finish_auction(db, auction)
+
+@app.post("/api/auctions/{auction_id}/cancel", response_model=AuctionRead)
+def api_cancel_auction(auction_id: int, db: Session = Depends(get_db)):
+    auction = db.get(Auction, auction_id)
+    if not auction:
+        raise HTTPException(404, "Аукцион не найден")
+    return cancel_auction(db, auction)
 
 @app.get("/api/sellers", response_model=list[PersonRead])
 def list_sellers(db: Session = Depends(get_db)):
@@ -148,34 +160,27 @@ def get_lot(lot_id: int, db: Session = Depends(get_db)):
 
 @app.post("/api/lots", response_model=LotRead, status_code=201)
 def create_lot(data: LotCreate, db: Session = Depends(get_db)):
-    if not db.get(Auction, data.auction_id):
+    auction = db.get(Auction, data.auction_id)
+    if not auction:
         raise HTTPException(404, "Аукцион не найден")
-    if not db.get(Seller, data.seller_id):
+    seller = db.get(Seller, data.seller_id)
+    if not seller:
         raise HTTPException(404, "Продавец не найден")
-    lot = Lot(**data.model_dump())
-    db.add(lot)
-    db.commit()
-    db.refresh(lot)
-    return lot
+    return add_lot(db, auction, seller, data.name, data.description, data.starting_price)
 
 @app.patch("/api/lots/{lot_id}", response_model=LotRead)
 def update_lot(lot_id: int, data: LotUpdate, db: Session = Depends(get_db)):
     lot = db.get(Lot, lot_id)
     if not lot:
         raise HTTPException(404, "Лот не найден")
-    for key, value in data.model_dump(exclude_unset=True).items():
-        setattr(lot, key, value)
-    db.commit()
-    db.refresh(lot)
-    return lot
+    return edit_lot(db, lot, data.model_dump(exclude_unset=True))
 
 @app.delete("/api/lots/{lot_id}", status_code=204)
 def delete_lot(lot_id: int, db: Session = Depends(get_db)):
     lot = db.get(Lot, lot_id)
     if not lot:
         raise HTTPException(404, "Лот не найден")
-    db.delete(lot)
-    db.commit()
+    remove_lot(db, lot)
 
 @app.get("/api/lots/{lot_id}/bids", response_model=list[BidRead])
 def list_bids(lot_id: int, db: Session = Depends(get_db)):
@@ -192,12 +197,15 @@ def create_bid(lot_id: int, data: BidCreate, db: Session = Depends(get_db)):
         raise HTTPException(404, "Покупатель не найден")
     return place_bid(db, lot, Bid(lot_id=lot_id, **data.model_dump()))
 
-@app.post("/api/lots/{lot_id}/sell", response_model=SaleRead, status_code=201)
-def api_sell_lot(lot_id: int, db: Session = Depends(get_db)):
-    lot = db.get(Lot, lot_id)
+@app.post("/api/sales", response_model=SaleRead, status_code=201)
+def api_create_sale(data: SaleCreate, db: Session = Depends(get_db)):
+    lot = db.get(Lot, data.lot_id)
     if not lot:
         raise HTTPException(404, "Лот не найден")
-    return sell_lot(db, lot)
+    buyer = db.get(Buyer, data.buyer_id)
+    if not buyer:
+        raise HTTPException(404, "Покупатель не найден")
+    return create_sale(db, lot, buyer, data.price)
 
 @app.get("/api/sales", response_model=list[SaleRead])
 def list_sales(db: Session = Depends(get_db)):
