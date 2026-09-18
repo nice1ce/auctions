@@ -111,7 +111,9 @@ def test_sale_closes_the_lot(client):
     buyer = _create_buyer(client)
     auction = _create_auction(client)
     client.post(f"/api/auctions/{auction['id']}/start")
-    lot = _create_lot(client, auction["id"], seller["id"], starting_price="50.00").json()
+    lot = _create_lot(
+        client, auction["id"], seller["id"], starting_price="50.00"
+    ).json()
 
     response = client.post(
         "/api/sales",
@@ -129,7 +131,9 @@ def test_sold_lot_cannot_be_sold_again(client):
     buyer = _create_buyer(client)
     auction = _create_auction(client)
     client.post(f"/api/auctions/{auction['id']}/start")
-    lot = _create_lot(client, auction["id"], seller["id"], starting_price="50.00").json()
+    lot = _create_lot(
+        client, auction["id"], seller["id"], starting_price="50.00"
+    ).json()
     client.post(
         "/api/sales",
         json={"lot_id": lot["id"], "buyer_id": buyer["id"], "price": "75.00"},
@@ -147,7 +151,9 @@ def test_sale_price_cannot_be_below_starting_price(client):
     buyer = _create_buyer(client)
     auction = _create_auction(client)
     client.post(f"/api/auctions/{auction['id']}/start")
-    lot = _create_lot(client, auction["id"], seller["id"], starting_price="50.00").json()
+    lot = _create_lot(
+        client, auction["id"], seller["id"], starting_price="50.00"
+    ).json()
 
     response = client.post(
         "/api/sales",
@@ -160,7 +166,9 @@ def test_sale_requires_active_auction(client):
     seller = _create_seller(client)
     buyer = _create_buyer(client)
     auction = _create_auction(client)
-    lot = _create_lot(client, auction["id"], seller["id"], starting_price="50.00").json()
+    lot = _create_lot(
+        client, auction["id"], seller["id"], starting_price="50.00"
+    ).json()
 
     response = client.post(
         "/api/sales",
@@ -170,7 +178,9 @@ def test_sale_requires_active_auction(client):
 
 
 def _place_bid(client, lot_id, buyer_id, amount):
-    return client.post(f"/api/lots/{lot_id}/bids", json={"buyer_id": buyer_id, "amount": amount})
+    return client.post(
+        f"/api/lots/{lot_id}/bids", json={"buyer_id": buyer_id, "amount": amount}
+    )
 
 
 def test_auction_with_lots_cannot_be_deleted(client):
@@ -187,7 +197,9 @@ def test_bid_below_minimum_step_is_rejected(client):
     buyer = _create_buyer(client)
     auction = _create_auction(client)
     client.post(f"/api/auctions/{auction['id']}/start")
-    lot = _create_lot(client, auction["id"], seller["id"], starting_price="100.00").json()
+    lot = _create_lot(
+        client, auction["id"], seller["id"], starting_price="100.00"
+    ).json()
 
     # Меньше чем starting_price + 100 -> отклоняется.
     response = _place_bid(client, lot["id"], buyer["id"], "150.00")
@@ -203,7 +215,9 @@ def test_current_price_reflects_highest_bid_then_sale(client):
     buyer = _create_buyer(client)
     auction = _create_auction(client)
     client.post(f"/api/auctions/{auction['id']}/start")
-    lot = _create_lot(client, auction["id"], seller["id"], starting_price="100.00").json()
+    lot = _create_lot(
+        client, auction["id"], seller["id"], starting_price="100.00"
+    ).json()
     assert lot["current_price"] == "100.00"
 
     _place_bid(client, lot["id"], buyer["id"], "200.00")

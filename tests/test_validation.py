@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 
+
 def test_invalid_auction_dates(client):
     response = client.post(
         "/api/auctions",

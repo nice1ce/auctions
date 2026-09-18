@@ -76,7 +76,9 @@ def edit_lot(db: Session, lot: Lot, values: dict) -> Lot:
     if lot.status != LotStatus.AVAILABLE:
         raise HTTPException(409, "Изменять можно только лот в статусе AVAILABLE")
     if lot.auction.status not in OPEN_AUCTION_STATUSES:
-        raise HTTPException(409, "Нельзя изменить лот завершённого или отменённого аукциона")
+        raise HTTPException(
+            409, "Нельзя изменить лот завершённого или отменённого аукциона"
+        )
     for key, value in values.items():
         setattr(lot, key, value)
     db.commit()
@@ -86,9 +88,13 @@ def edit_lot(db: Session, lot: Lot, values: dict) -> Lot:
 
 def remove_lot(db: Session, lot: Lot) -> None:
     if lot.status != LotStatus.AVAILABLE:
-        raise HTTPException(409, "Удалить можно только непроданный лот в статусе AVAILABLE")
+        raise HTTPException(
+            409, "Удалить можно только непроданный лот в статусе AVAILABLE"
+        )
     if lot.auction.status not in OPEN_AUCTION_STATUSES:
-        raise HTTPException(409, "Нельзя удалить лот завершённого или отменённого аукциона")
+        raise HTTPException(
+            409, "Нельзя удалить лот завершённого или отменённого аукциона"
+        )
     has_bids = db.scalar(select(Bid.id).where(Bid.lot_id == lot.id).limit(1))
     if has_bids:
         raise HTTPException(409, "Нельзя удалить лот, на который уже сделаны ставки")
@@ -110,7 +116,8 @@ def place_bid(db: Session, lot: Lot, bid: Bid) -> Bid:
     minimum = current_price + MIN_BID_STEP
     if bid.amount < minimum:
         raise HTTPException(
-            409, f"Ставка должна быть не меньше {minimum:.2f} (шаг ставки {MIN_BID_STEP:.2f})"
+            409,
+            f"Ставка должна быть не меньше {minimum:.2f} (шаг ставки {MIN_BID_STEP:.2f})",
         )
     db.add(bid)
     db.commit()
@@ -123,12 +130,15 @@ def create_sale(db: Session, lot: Lot, buyer: Buyer, price: Decimal) -> Sale:
     Продажа возможна только для открытого (AVAILABLE) лота активного аукциона,
     и её создание сразу закрывает лот (переводит в SOLD)."""
     if lot.auction.status != AuctionStatus.ACTIVE:
-        raise HTTPException(409, "Продажу можно оформить только во время ACTIVE аукциона")
+        raise HTTPException(
+            409, "Продажу можно оформить только во время ACTIVE аукциона"
+        )
     if lot.status != LotStatus.AVAILABLE:
         raise HTTPException(409, "Лот уже закрыт: продан или снят с торгов")
     if price < lot.starting_price:
         raise HTTPException(
-            422, f"Цена продажи не может быть ниже стартовой цены {lot.starting_price:.2f}"
+            422,
+            f"Цена продажи не может быть ниже стартовой цены {lot.starting_price:.2f}",
         )
     sale = Sale(lot_id=lot.id, buyer_id=buyer.id, price=price)
     lot.status = LotStatus.SOLD

@@ -3,7 +3,7 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 from app.config import get_settings
 from app.db import Base
-from app import models # noqa: F401
+from app import models  # noqa: F401
 
 config = context.config
 settings = get_settings()
@@ -13,6 +13,7 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata
+
 
 def run_migrations_offline():
     context.configure(
@@ -24,6 +25,7 @@ def run_migrations_offline():
     with context.begin_transaction():
         context.run_migrations()
 
+
 def run_migrations_online():
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
@@ -34,6 +36,7 @@ def run_migrations_online():
         context.configure(connection=connection, target_metadata=target_metadata)
         with context.begin_transaction():
             context.run_migrations()
+
 
 if context.is_offline_mode():
     run_migrations_offline()

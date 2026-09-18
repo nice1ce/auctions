@@ -6,6 +6,7 @@ down_revision = None
 branch_labels = None
 depends_on = None
 
+
 def upgrade():
     op.create_table(
         "auctions",
@@ -15,7 +16,12 @@ def upgrade():
         sa.Column("start_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("end_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("status", sa.String(20), nullable=False, server_default="PLANNED"),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
     )
     op.create_table(
         "sellers",
@@ -23,7 +29,12 @@ def upgrade():
         sa.Column("name", sa.String(200), nullable=False),
         sa.Column("email", sa.String(320), nullable=False),
         sa.Column("phone", sa.String(50)),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
     )
     op.create_table(
         "buyers",
@@ -31,18 +42,32 @@ def upgrade():
         sa.Column("name", sa.String(200), nullable=False),
         sa.Column("email", sa.String(320), nullable=False),
         sa.Column("phone", sa.String(50)),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
     )
     op.create_table(
         "lots",
         sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("auction_id", sa.Integer(), sa.ForeignKey("auctions.id"), nullable=False),
-        sa.Column("seller_id", sa.Integer(), sa.ForeignKey("sellers.id"), nullable=False),
+        sa.Column(
+            "auction_id", sa.Integer(), sa.ForeignKey("auctions.id"), nullable=False
+        ),
+        sa.Column(
+            "seller_id", sa.Integer(), sa.ForeignKey("sellers.id"), nullable=False
+        ),
         sa.Column("name", sa.String(200), nullable=False),
         sa.Column("description", sa.Text()),
         sa.Column("starting_price", sa.Numeric(12, 2), nullable=False),
         sa.Column("status", sa.String(20), nullable=False, server_default="AVAILABLE"),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
     )
     op.create_table(
         "bids",
@@ -50,16 +75,33 @@ def upgrade():
         sa.Column("lot_id", sa.Integer(), sa.ForeignKey("lots.id"), nullable=False),
         sa.Column("buyer_id", sa.Integer(), sa.ForeignKey("buyers.id"), nullable=False),
         sa.Column("amount", sa.Numeric(12, 2), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
     )
     op.create_table(
         "sales",
         sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("lot_id", sa.Integer(), sa.ForeignKey("lots.id"), nullable=False, unique=True),
+        sa.Column(
+            "lot_id",
+            sa.Integer(),
+            sa.ForeignKey("lots.id"),
+            nullable=False,
+            unique=True,
+        ),
         sa.Column("buyer_id", sa.Integer(), sa.ForeignKey("buyers.id"), nullable=False),
         sa.Column("price", sa.Numeric(12, 2), nullable=False),
-        sa.Column("sold_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "sold_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
     )
+
 
 def downgrade():
     op.drop_table("sales")
