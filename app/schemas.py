@@ -44,6 +44,7 @@ class LotRead(LotCreate):
     model_config = ConfigDict(from_attributes=True)
     id: int
     status: str
+    current_price: Decimal
 
 class BidCreate(BaseModel):
     buyer_id: int

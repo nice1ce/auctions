@@ -169,6 +169,10 @@ def test_sale_requires_active_auction(client):
     assert response.status_code == 409, response.text
 
 
+def _place_bid(client, lot_id, buyer_id, amount):
+    return client.post(f"/api/lots/{lot_id}/bids", json={"buyer_id": buyer_id, "amount": amount})
+
+
 def test_auction_with_lots_cannot_be_deleted(client):
     seller = _create_seller(client)
     auction = _create_auction(client)
@@ -176,3 +180,39 @@ def test_auction_with_lots_cannot_be_deleted(client):
 
     response = client.delete(f"/api/auctions/{auction['id']}")
     assert response.status_code == 409, response.text
+
+
+def test_bid_below_minimum_step_is_rejected(client):
+    seller = _create_seller(client)
+    buyer = _create_buyer(client)
+    auction = _create_auction(client)
+    client.post(f"/api/auctions/{auction['id']}/start")
+    lot = _create_lot(client, auction["id"], seller["id"], starting_price="100.00").json()
+
+    # Меньше чем starting_price + 100 -> отклоняется.
+    response = _place_bid(client, lot["id"], buyer["id"], "150.00")
+    assert response.status_code == 409, response.text
+
+    # Ровно starting_price + 100 -> принимается.
+    response = _place_bid(client, lot["id"], buyer["id"], "200.00")
+    assert response.status_code == 201, response.text
+
+
+def test_current_price_reflects_highest_bid_then_sale(client):
+    seller = _create_seller(client)
+    buyer = _create_buyer(client)
+    auction = _create_auction(client)
+    client.post(f"/api/auctions/{auction['id']}/start")
+    lot = _create_lot(client, auction["id"], seller["id"], starting_price="100.00").json()
+    assert lot["current_price"] == "100.00"
+
+    _place_bid(client, lot["id"], buyer["id"], "200.00")
+    lot_after_bid = client.get(f"/api/lots/{lot['id']}").json()
+    assert lot_after_bid["current_price"] == "200.00"
+
+    client.post(
+        "/api/sales",
+        json={"lot_id": lot["id"], "buyer_id": buyer["id"], "price": "250.00"},
+    )
+    lot_after_sale = client.get(f"/api/lots/{lot['id']}").json()
+    assert lot_after_sale["current_price"] == "250.00"

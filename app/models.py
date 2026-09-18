@@ -61,6 +61,16 @@ class Lot(Base):
     bids: Mapped[list["Bid"]] = relationship(back_populates="lot")
     sale: Mapped["Sale | None"] = relationship(back_populates="lot", uselist=False)
 
+    @property
+    def current_price(self) -> Decimal:
+        """Текущая цена лота для отображения в списках: цена продажи, если лот
+        уже продан; иначе максимальная ставка; иначе стартовая цена."""
+        if self.sale is not None:
+            return self.sale.price
+        if self.bids:
+            return max(bid.amount for bid in self.bids)
+        return self.starting_price
+
 class Bid(Base):
     __tablename__ = "bids"
     id: Mapped[int] = mapped_column(primary_key=True)

@@ -96,15 +96,22 @@ def remove_lot(db: Session, lot: Lot) -> None:
     db.commit()
 
 
+# Минимальный шаг ставки: новая ставка должна перебивать текущую цену не менее чем на эту сумму.
+MIN_BID_STEP = Decimal("100.00")
+
+
 def place_bid(db: Session, lot: Lot, bid: Bid) -> Bid:
     if lot.auction.status != AuctionStatus.ACTIVE:
         raise HTTPException(409, "Ставка принимается только во время ACTIVE аукциона")
     if lot.status != LotStatus.AVAILABLE:
         raise HTTPException(409, "Лот недоступен для ставок")
     current_max = db.scalar(select(func.max(Bid.amount)).where(Bid.lot_id == lot.id))
-    minimum = current_max if current_max is not None else lot.starting_price
-    if bid.amount <= minimum:
-        raise HTTPException(409, f"Ставка должна быть больше текущей цены {minimum:.2f}")
+    current_price = current_max if current_max is not None else lot.starting_price
+    minimum = current_price + MIN_BID_STEP
+    if bid.amount < minimum:
+        raise HTTPException(
+            409, f"Ставка должна быть не меньше {minimum:.2f} (шаг ставки {MIN_BID_STEP:.2f})"
+        )
     db.add(bid)
     db.commit()
     db.refresh(bid)
