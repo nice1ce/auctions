@@ -55,6 +55,11 @@ class BidRead(BidCreate):
     lot_id: int
     created_at: datetime
 
+class SaleCreate(BaseModel):
+    lot_id: int
+    buyer_id: int
+    price: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
+
 class SaleRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
