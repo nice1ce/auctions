@@ -29,6 +29,39 @@
     </form>
   </section>
   <section class="panel"><h2>Аукционы</h2><div id="auctions"></div></section>
+
+  <section class="panel">
+    <h2>Продавцы и покупатели</h2>
+    <form id="seller-form">
+      <input name="name" placeholder="Имя продавца" required>
+      <input name="email" type="email" placeholder="Email" required>
+      <input name="phone" placeholder="Телефон">
+      <button>Добавить продавца</button>
+    </form>
+    <form id="buyer-form">
+      <input name="name" placeholder="Имя покупателя" required>
+      <input name="email" type="email" placeholder="Email" required>
+      <input name="phone" placeholder="Телефон">
+      <button>Добавить покупателя</button>
+    </form>
+    <div class="two-col">
+      <div><h3>Продавцы</h3><div id="sellers"></div></div>
+      <div><h3>Покупатели</h3><div id="buyers"></div></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Добавить лот</h2>
+    <p class="hint">Лот можно добавить только в аукцион со статусом PLANNED или ACTIVE.</p>
+    <form id="lot-form">
+      <select name="auction_id" required></select>
+      <select name="seller_id" required></select>
+      <input name="name" placeholder="Название лота" required>
+      <input name="starting_price" type="number" step="0.01" min="0.01" placeholder="Стартовая цена" required>
+      <input name="description" placeholder="Описание">
+      <button>Добавить лот</button>
+    </form>
+  </section>
   <section class="panel"><h2>Лоты</h2><div id="lots"></div></section>
   <section class="panel"><h2>Продажи</h2><div id="sales"></div></section>
   <div id="message"></div>
