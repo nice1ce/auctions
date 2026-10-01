@@ -2,6 +2,8 @@
 
 Service: `GET /health`, `GET /version`
 
+Auth: `POST /api/auth/register` (тело: `email`, `password` от 8 символов), `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`. Сессия — httponly cookie `session_token`. Без ролей: вход не влияет на доступ к остальным эндпоинтам ниже — они как были открыты без авторизации, так и остаются.
+
 Auctions: `GET/POST /api/auctions`, `GET/PATCH/DELETE /api/auctions/{id}`, `POST /api/auctions/{id}/start`, `POST /api/auctions/{id}/finish`, `POST /api/auctions/{id}/cancel`. `DELETE` отклоняется (409), если у аукциона уже есть лоты.
 
 Sellers: `GET/POST /api/sellers`, `PATCH /api/sellers/{id}`

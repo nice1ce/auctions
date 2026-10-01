@@ -1,6 +1,13 @@
 * { box-sizing: border-box; }
 body { margin: 0; font-family: system-ui, sans-serif; background: #f4f6f8; color: #17202a; }
 header { padding: 28px max(20px, calc((100% - 1100px) / 2)); background: #17202a; color: white; }
+.auth-bar { background: #232f3b; color: white; padding: 10px max(20px, calc((100% - 1100px) / 2)); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 14px; }
+.auth-bar form { display: flex; gap: 8px; margin: 0; grid-template-columns: none; }
+.auth-bar input { padding: 6px 8px; font-size: 13px; border-radius: 6px; border: 1px solid #3a4552; background: #17202a; color: white; }
+.auth-bar input::placeholder { color: #8a94a0; }
+.auth-bar button { padding: 6px 12px; font-size: 13px; background: white; color: #17202a; }
+.auth-bar .who { font-weight: 600; }
+.auth-bar .divider { flex: 1; }
 main { max-width: 1100px; margin: 24px auto; padding: 0 20px 40px; }
 .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 .cards div, .panel { background: white; border-radius: 12px; padding: 18px; box-shadow: 0 2px 10px #0000000d; }

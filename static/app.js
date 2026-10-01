@@ -30,9 +30,80 @@ function optionList(items, labelFn) {
   return items.map((i) => `<option value="${i.id}">${esc(labelFn(i))}</option>`).join("");
 }
 
+let currentUser = null; // null = не залогинен
 let state = { auctions: [], sellers: [], buyers: [], lots: [], sales: [] };
 
+async function fetchCurrentUser() {
+  const response = await fetch("/api/auth/me");
+  if (!response.ok) return null; // 401, если не залогинен — это норма, не ошибка
+  return response.json();
+}
+
+function renderAuthBar() {
+  const bar = $("auth-bar");
+  if (currentUser) {
+    bar.innerHTML = `
+      <span class="who">${esc(currentUser.email)}</span>
+      <span class="divider"></span>
+      <button onclick="logout()">Выйти</button>
+    `;
+    return;
+  }
+  bar.innerHTML = `
+    <form id="login-form">
+      <input name="email" type="email" placeholder="Email" required>
+      <input name="password" type="password" placeholder="Пароль" required>
+      <button>Войти</button>
+    </form>
+    <span class="divider"></span>
+    <form id="register-form">
+      <input name="email" type="email" placeholder="Email" required>
+      <input name="password" type="password" placeholder="Пароль, от 8 символов" minlength="8" required>
+      <button>Зарегистрироваться</button>
+    </form>
+  `;
+  $("login-form").addEventListener("submit", onLoginSubmit);
+  $("register-form").addEventListener("submit", onRegisterSubmit);
+}
+
+async function onLoginSubmit(event) {
+  event.preventDefault();
+  const form = new FormData(event.target);
+  try {
+    await api("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email: form.get("email"), password: form.get("password") }),
+    });
+    toast("Вход выполнен");
+    await loadDashboard();
+  } catch (error) { toast(error.message, "error"); }
+}
+
+async function onRegisterSubmit(event) {
+  event.preventDefault();
+  const form = new FormData(event.target);
+  try {
+    await api("/api/auth/register", {
+      method: "POST",
+      body: JSON.stringify({ email: form.get("email"), password: form.get("password") }),
+    });
+    toast("Регистрация выполнена, вы вошли в систему");
+    await loadDashboard();
+  } catch (error) { toast(error.message, "error"); }
+}
+
+async function logout() {
+  try {
+    await api("/api/auth/logout", { method: "POST" });
+    toast("Вы вышли из системы");
+    await loadDashboard();
+  } catch (error) { toast(error.message, "error"); }
+}
+
 async function loadDashboard() {
+  currentUser = await fetchCurrentUser();
+  renderAuthBar();
+
   try {
     const [auctions, sellers, buyers, lots, sales, revenue] = await Promise.all([
       api("/api/auctions"), api("/api/sellers"), api("/api/buyers"),

@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     database_url: str
     test_database_url: str | None = None
     backup_file: str = "backup.sql"
+    session_ttl_days: int = 7
+    cookie_secure: bool = False
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

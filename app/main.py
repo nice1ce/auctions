@@ -1,26 +1,37 @@
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Cookie, Depends, FastAPI, HTTPException, Response
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.auth import (
+    SESSION_COOKIE,
+    authenticate_user,
+    end_session,
+    register_user,
+    require_user,
+    start_session,
+)
 from app.config import get_settings
 from app.db import get_db
-from app.models import Auction, Buyer, Bid, Lot, Sale, Seller
+from app.models import Auction, Buyer, Bid, Lot, Sale, Seller, User
 from app.schemas import (
     AuctionCreate,
     AuctionRead,
     AuctionUpdate,
     BidCreate,
     BidRead,
+    LoginRequest,
     LotCreate,
     LotRead,
     LotUpdate,
     PersonCreate,
     PersonRead,
+    RegisterRequest,
     RevenueRead,
     SaleCreate,
     SaleRead,
+    UserRead,
 )
 from app.services import (
     add_lot,
@@ -51,6 +62,42 @@ def version():
 @app.get("/")
 def index():
     return FileResponse("static/index.html")
+
+
+# ---- Аутентификация -------------------------------------------------------
+# Базовая, без ролей: любой зарегистрированный пользователь имеет одинаковые
+# права. Остальные эндпоинты ниже не защищены и не требуют входа — авторизация
+# пока существует как самостоятельная функция, а не как контроль доступа.
+
+
+@app.post("/api/auth/register", response_model=UserRead, status_code=201)
+def api_register(
+    data: RegisterRequest, response: Response, db: Session = Depends(get_db)
+):
+    user = register_user(db, data.email, data.password)
+    start_session(db, response, user)
+    return user
+
+
+@app.post("/api/auth/login", response_model=UserRead)
+def api_login(data: LoginRequest, response: Response, db: Session = Depends(get_db)):
+    user = authenticate_user(db, data.email, data.password)
+    start_session(db, response, user)
+    return user
+
+
+@app.post("/api/auth/logout", status_code=204)
+def api_logout(
+    response: Response,
+    session_token: str | None = Cookie(default=None, alias=SESSION_COOKIE),
+    db: Session = Depends(get_db),
+):
+    end_session(db, response, session_token)
+
+
+@app.get("/api/auth/me", response_model=UserRead)
+def api_me(user: User = Depends(require_user)):
+    return user
 
 
 @app.get("/api/auctions", response_model=list[AuctionRead])

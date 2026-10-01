@@ -112,3 +112,32 @@ class Sale(Base):
     )
     lot: Mapped[Lot] = relationship(back_populates="sale")
     buyer: Mapped[Buyer] = relationship(back_populates="sales")
+
+
+class User(Base):
+    """Базовая учётная запись для входа в систему: email + пароль. Без ролей —
+    любой залогиненный пользователь имеет одинаковые права (аутентификация
+    как отдельная фича, без разделения доступа между пользователями)."""
+
+    __tablename__ = "users"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(320), unique=True)
+    password_hash: Mapped[str] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class UserSession(Base):
+    """Серверная сессия: opaque-токен в httponly cookie -> строка в этой
+    таблице. Простая альтернатива JWT без лишней зависимости, logout —
+    просто удаление строки."""
+
+    __tablename__ = "user_sessions"
+    token: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    user: Mapped[User] = relationship()
