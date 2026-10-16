@@ -1,76 +1,115 @@
+# Auction System — команды разработки (Lab 3).
+# Переменные берутся из .env (создаётся из .env.example командой make setup).
+-include .env
+export
+
 PYTHON ?= python3
 VENV ?= .venv
 BIN := $(VENV)/bin
-DATABASE_URL ?= postgresql+psycopg://auction:auction@localhost:5432/auction_db
-BACKUP_FILE ?= backup.sql
 
-.PHONY: setup run test quality migrate backup restore verify up down container-check reset-db test-restore sast
+# pg_dump/psql понимают только postgresql://, без драйвера «+psycopg».
+PG_URL = $(subst +psycopg,,$(DATABASE_URL))
+DB_NAME = $(lastword $(subst /, ,$(PG_URL)))
+PG_MAINTENANCE_URL = $(patsubst %/$(DB_NAME),%/postgres,$(PG_URL))
+# По умолчанию клиенты PostgreSQL запускаются внутри контейнера db, ставить
+# их на хост не нужно. С локальным PostgreSQL: make backup PG_EXEC=
+PG_EXEC ?= docker compose exec -T db
+BACKUP_FILE ?= backups/backup.sql
 
-setup:
+.PHONY: help setup init up down db-wait run migrate migrate-check db-reset \
+	policy lint format format-check sast test verify mutation \
+	backup restore backup-check container-check clean
+
+help:
+	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | sed 's/:.*## /\t/'
+
+# ---- Установка и запуск -----------------------------------------------------
+
+setup: ## venv + зафиксированные зависимости + .env
 	$(PYTHON) -m venv $(VENV)
 	$(BIN)/pip install --upgrade pip
 	$(BIN)/pip install -r requirements.txt
 	@test -f .env || cp .env.example .env
 
-run:
-	$(BIN)/uvicorn app.main:app --reload
+init: setup up db-wait migrate ## единый сценарий первоначальной настройки
+	@echo "Готово: make run -> http://127.0.0.1:8000"
 
-# П. 4, 14: Тесты с проверкой покрытия не менее 40%. 
-# ЗАПРЕЩЕНО снижать порог --cov-fail-under или добавлять исключения без обоснования в PR.
-test:
-	$(BIN)/pytest -q --cov=app --cov-report=term-missing --cov-fail-under=40
-
-# П. 7: Статический анализ безопасности (SAST)
-sast:
-	$(BIN)/bandit -r app/ -ll
-
-quality:
-	$(BIN)/ruff check .
-	$(BIN)/black --check .
-
-# П. 13: Единая команда verify запускает весь обязательный набор локальных проверок.
-# Порядок важен: сначала SAST, потом качество кода, потом тесты с покрытием.
-verify: sast quality test
-
-migrate:
-	$(BIN)/alembic upgrade head
-
-# П. 9: Проверка создания чистой БД и применения миграций с нуля
-reset-db:
-	docker compose down -v
-	docker compose up -d db
-	sleep 5
-	docker compose exec -T db psql -U auction -d postgres -c "DROP DATABASE IF EXISTS auction_db;"
-	docker compose exec -T db psql -U auction -d postgres -c "CREATE DATABASE auction_db OWNER auction;"
-	$(BIN)/alembic upgrade head
-
-backup:
-	pg_dump "$(DATABASE_URL)" > "$(BACKUP_FILE)"
-
-restore:
-	psql "$(DATABASE_URL)" < "$(BACKUP_FILE)"
-
-# П. 11, 12: Сценарий проверки восстановления после намеренного повреждения данных
-test-restore:
-	@echo "=== Начало сценария проверки восстановления ==="
-	@echo "1. Создаем тестовый лот для эксперимента..."
-	@docker compose exec -T db psql -U auction -d auction_db -c "INSERT INTO lots (auction_id, seller_id, name, starting_price, status) SELECT id, 1, 'Backup Test Lot', 100.00, 'AVAILABLE' FROM auctions LIMIT 1;" || echo "Убедитесь, что в БД есть хотя бы один аукцион и продавец с id=1."
-	@echo "2. Делаем резервную копию..."
-	@$(MAKE) backup
-	@echo "3. Намеренно повреждаем данные (удаляем созданный лот)..."
-	@docker compose exec -T db psql -U auction -d auction_db -c "DELETE FROM lots WHERE name = 'Backup Test Lot';"
-	@echo "4. Восстанавливаем данные из резервной копии..."
-	@$(MAKE) restore
-	@echo "5. Проверяем целостность данных..."
-	@docker compose exec -T db psql -U auction -d auction_db -c "SELECT COUNT(*) as restored_lots_count FROM lots WHERE name = 'Backup Test Lot';"
-	@echo "=== Если restored_lots_count = 1, восстановление прошло успешно! ==="
-
-up:
+up: ## поднять PostgreSQL в Docker
 	docker compose up -d db
 
 down:
 	docker compose down
 
+db-wait:
+	@for i in $$(seq 1 30); do \
+		$(PG_EXEC) pg_isready -q -d "$(PG_URL)" && exit 0; sleep 1; \
+	done; echo "PostgreSQL недоступен"; exit 1
+
+run: ## запустить приложение
+	$(BIN)/uvicorn app.main:app --reload
+
+# ---- Миграции (п. 8, 9) -----------------------------------------------------
+
+migrate: ## применить миграции к рабочей БД
+	$(BIN)/alembic upgrade head
+
+migrate-check: ## обновить БД с данными до head и сверить схему с моделями
+	$(BIN)/alembic current
+	$(BIN)/alembic upgrade head
+	$(BIN)/alembic check
+
+db-reset: ## пересоздать ЧИСТУЮ рабочую БД и применить все миграции
+	$(PG_EXEC) dropdb --if-exists --force --maintenance-db="$(PG_MAINTENANCE_URL)" $(DB_NAME)
+	$(PG_EXEC) createdb --maintenance-db="$(PG_MAINTENANCE_URL)" $(DB_NAME)
+	$(BIN)/alembic upgrade head
+
+# ---- Проверки (п. 7, 13, 14) ------------------------------------------------
+
+policy: ## запрет пропуска тестов, снижения порогов и исключений без обоснования
+	$(BIN)/python scripts/check_policy.py
+
+lint: ## линтер
+	$(BIN)/ruff check .
+
+format-check: ## проверка форматирования
+	$(BIN)/black --check .
+
+format: ## автоформатирование
+	$(BIN)/black .
+	$(BIN)/ruff check --fix .
+
+sast: ## статический анализ безопасности
+	$(BIN)/bandit -r app alembic scripts
+
+test: ## unit + интеграционные тесты на тестовой БД, отчёты в reports/
+	$(BIN)/pytest
+
+verify: policy lint format-check sast test ## весь обязательный набор проверок
+
+mutation: ## мутационное тестирование бизнес-логики (несколько минут)
+	$(BIN)/python scripts/mutation_check.py
+
+# ---- Резервное копирование (п. 11, 12) ----------------------------------------
+
+backup: ## резервная копия рабочей БД в $(BACKUP_FILE)
+	@mkdir -p "$(dir $(BACKUP_FILE))"
+	$(PG_EXEC) pg_dump --clean --if-exists --no-owner --no-privileges "$(PG_URL)" > "$(BACKUP_FILE).tmp"
+	@mv "$(BACKUP_FILE).tmp" "$(BACKUP_FILE)"
+	@echo "Резервная копия: $(BACKUP_FILE)"
+
+restore: ## восстановить рабочую БД из $(BACKUP_FILE) (одной транзакцией)
+	@test -s "$(BACKUP_FILE)" || { echo "Нет файла $(BACKUP_FILE)"; exit 1; }
+	$(PG_EXEC) psql -q -X -v ON_ERROR_STOP=1 --single-transaction "$(PG_URL)" < "$(BACKUP_FILE)" > /dev/null
+	@echo "Восстановлено из $(BACKUP_FILE)"
+
+backup-check: ## сценарий: копия -> порча данных -> восстановление -> сверка
+	scripts/backup_restore_check.sh
+
+# ---- Прочее -------------------------------------------------------------------
+
 container-check:
 	docker compose config
 	docker compose ps
+
+clean:
+	rm -rf reports .pytest_cache .ruff_cache .coverage

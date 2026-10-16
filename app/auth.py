@@ -44,6 +44,7 @@ def authenticate_user(db: Session, email: str, password: str) -> User:
 
 def start_session(db: Session, response: Response, user: User) -> None:
     settings = get_settings()
+    # no-mutate -- длина токена (32 байта = 256 бит) не влияет на поведение API
     token = secrets.token_urlsafe(32)
     ttl = timedelta(days=settings.session_ttl_days)
     db.add(

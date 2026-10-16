@@ -11,34 +11,28 @@ Python 3.12, FastAPI, SQLAlchemy 2, PostgreSQL, Alembic, Pydantic Settings, pyte
 ## Быстрый старт
 
 ```bash
-cp .env.example .env
-make setup
-make migrate
+make init   # venv, зависимости, .env, PostgreSQL в Docker, миграции
 make run
 ```
 
 Откройте `http://127.0.0.1:8000`.
 
-PostgreSQL можно удобно поднять локально:
-
-```bash
-make up
-make migrate
-make run
-```
-
 ## Команды
 
-`make setup` — окружение и зависимости  
+`make init` — единый сценарий первоначальной настройки  
+`make setup` — окружение и зафиксированные зависимости  
 `make run` — FastAPI  
-`make test` — тесты  
-`make quality` — Ruff + Black  
-`make migrate` — Alembic upgrade head  
-`make backup` — pg_dump  
-`make restore` — восстановление из backup.sql  
-`make verify` — quality + tests  
 `make up` / `make down` — локальный PostgreSQL  
+`make migrate` — Alembic upgrade head  
+`make migrate-check` — обновление БД с данными + сверка схемы с моделями  
+`make db-reset` — пересоздать чистую БД и применить миграции  
+`make verify` — policy + ruff + black + bandit + тесты с покрытием  
+`make mutation` — мутационное тестирование бизнес-логики  
+`make backup` / `make restore` — резервная копия и восстановление  
+`make backup-check` — копия → порча данных → восстановление → сверка  
 `make container-check` — базовая проверка Compose
+
+Подробности о проверках, миграциях и бэкапах: `docs/TESTING.md`.
 
 ## API
 
@@ -58,6 +52,7 @@ Version: `/version`
 5. Аукцион нельзя удалить, если у него уже есть лоты; лот нельзя удалить, если на него уже сделаны ставки.
 6. Выручка рассчитывается как сумма цен продаж и не хранится отдельной сущностью.
 7. `GET /api/lots` и `GET /api/lots/{id}` дополнительно отдают вычисляемое поле `current_price`: цена продажи (если лот продан), иначе максимальная ставка, иначе стартовая цена — чтобы в интерфейсе всегда была видна актуальная цена лота, а не только стартовая.
+8. `POST /api/lots/{id}/view` увеличивает счётчик просмотров лота `views_count` (Lab 3, миграция `0005_lot_views_count`).
 
 ## Аутентификация
 

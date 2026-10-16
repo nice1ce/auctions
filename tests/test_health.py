@@ -4,8 +4,7 @@ def test_health(client):
     assert response.json() == {"status": "ok"}
 
 
-def test_version(client):
+def test_version(client, api_version):
     response = client.get("/version")
     assert response.status_code == 200
-    data = response.json()
-    assert "version" in data
+    assert response.json()["version"] == api_version

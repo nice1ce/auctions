@@ -95,6 +95,7 @@ def remove_lot(db: Session, lot: Lot) -> None:
         raise HTTPException(
             409, "Нельзя удалить лот завершённого или отменённого аукциона"
         )
+    # no-mutate -- limit(N) при N>=1 эквивалентен: проверяется только наличие ставок
     has_bids = db.scalar(select(Bid.id).where(Bid.lot_id == lot.id).limit(1))
     if has_bids:
         raise HTTPException(409, "Нельзя удалить лот, на который уже сделаны ставки")
@@ -149,8 +150,14 @@ def create_sale(db: Session, lot: Lot, buyer: Buyer, price: Decimal) -> Sale:
 
 
 def increment_lot_views(db: Session, lot: Lot) -> Lot:
-    """Увеличивает счетчик просмотров лота на 1."""
-    lot.views_count += 1
+    """Lab 3: увеличивает счётчик просмотров лота на 1.
+
+    Инкремент делается одним UPDATE на стороне БД (views_count = views_count + 1),
+    а не через чтение-изменение-запись в Python, чтобы параллельные просмотры
+    не терялись."""
+    db.execute(
+        update(Lot).where(Lot.id == lot.id).values(views_count=Lot.views_count + 1)
+    )
     db.commit()
     db.refresh(lot)
     return lot

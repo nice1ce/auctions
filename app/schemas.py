@@ -55,6 +55,12 @@ class LotRead(LotCreate):
     id: int
     status: str
     current_price: Decimal
+    views_count: int
+
+
+class LotViewsRead(BaseModel):
+    lot_id: int
+    views_count: int
 
 
 class BidCreate(BaseModel):
