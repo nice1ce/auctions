@@ -69,6 +69,7 @@ class Lot(Base):
     description: Mapped[str | None] = mapped_column(Text)
     starting_price: Mapped[Decimal] = mapped_column(Numeric(12, 2))
     status: Mapped[LotStatus] = mapped_column(String(20), default=LotStatus.AVAILABLE)
+    views_count: Mapped[int] = mapped_column(default=0)  # НОВОЕ ПОЛЕ
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -76,16 +77,6 @@ class Lot(Base):
     seller: Mapped[Seller] = relationship(back_populates="lots")
     bids: Mapped[list["Bid"]] = relationship(back_populates="lot")
     sale: Mapped["Sale | None"] = relationship(back_populates="lot", uselist=False)
-
-    @property
-    def current_price(self) -> Decimal:
-        """Текущая цена лота для отображения в списках: цена продажи, если лот
-        уже продан; иначе максимальная ставка; иначе стартовая цена."""
-        if self.sale is not None:
-            return self.sale.price
-        if self.bids:
-            return max(bid.amount for bid in self.bids)
-        return self.starting_price
 
 
 class Bid(Base):

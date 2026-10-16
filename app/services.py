@@ -146,3 +146,11 @@ def create_sale(db: Session, lot: Lot, buyer: Buyer, price: Decimal) -> Sale:
     db.commit()
     db.refresh(sale)
     return sale
+
+
+def increment_lot_views(db: Session, lot: Lot) -> Lot:
+    """Увеличивает счетчик просмотров лота на 1."""
+    lot.views_count += 1
+    db.commit()
+    db.refresh(lot)
+    return lot
