@@ -1,4 +1,4 @@
-# Auction System — команды разработки (Lab 3), контейнеров (Lab 4) и CI (Lab 5).
+# Auction System — разработка (Lab 3), контейнеры (Lab 4), CI (Lab 5) и поставка (Lab 6).
 # CI (.github/workflows/ci.yml) вызывает эти же цели — локально и в CI одни команды.
 # Переменные берутся из .env (создаётся из .env.example командой make setup).
 -include .env
@@ -25,6 +25,8 @@ CONTAINER_CHECK = $(PYTHON) scripts/container_check.py $(CONTAINER_CHECK_FLAGS)
 # В CI образ собирается отдельной стадией: CONTAINER_CHECK_FLAGS=--no-build
 CONTAINER_CHECK_FLAGS ?=
 CONTAINER_BACKUP ?= backups/container-backup.sql
+# Commit, зашиваемый в образ при локальной сборке (Lab 6, /version)
+GIT_SHA ?= $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
 # Базовый образ для make lock — тот же, что в Dockerfile.
 PYTHON_IMAGE = $(shell awk '$$1 == "FROM" { print $$2; exit }' Dockerfile)
 
@@ -34,6 +36,10 @@ IMAGE ?= auctions-app:$(APP_VERSION)
 REGISTRY ?= localhost:5000
 GUARD_BASE ?= origin/main
 
+# Lab 6: поставка на staging
+DEPLOY_ROOT ?= /srv/auctions-staging
+RELEASE_URL ?= http://127.0.0.1:8081
+
 .PHONY: help setup init up down db-wait run migrate migrate-check db-reset \
 	policy lint format format-check sast test verify mutation \
 	backup restore backup-check clean \
@@ -42,7 +48,8 @@ GUARD_BASE ?= origin/main
 	container-persistence-check container-stop-check container-restore-check \
 	container-lb-check container-all-checks lock pin-digest env-password \
 	db-password-apply migrate-roundtrip deps-audit secrets-scan image-scan \
-	registry-up registry-down image-publish ci ci-guard ci-demo
+	registry-up registry-down image-publish ci ci-guard ci-demo \
+	deploy deploy-rollback deploy-status release-check release-demo
 
 help:
 	@grep -hE '^[a-z-]+:.*## ' Makefile | sed 's/:.*## /\t/'
@@ -246,6 +253,25 @@ ci-guard: ## п. 15: страж критических файлов — срав
 
 ci-demo: ## п. 15–16: демонстрационная ветка, DEMO=good|defect|delete-test|skip-test|lower-coverage|disable-check|weaken-lint
 	bash scripts/ci_demo.sh "$(DEMO)"
+
+# ---- Поставка на staging (Lab 6) ---------------------------------------------------
+# Запускаются pipeline (workflow deploy-staging) на сервере от пользователя deploy
+# или вручную тем же пользователем: sudo -iu deploy, затем make -C <клон> deploy ...
+
+deploy: ## п. 5, 10: выпустить образ из registry с тегом TAG на staging (проверка + автовозврат)
+	bash scripts/deploy.sh deploy "$(TAG)"
+
+deploy-rollback: ## п. 10: вернуть предыдущую успешную версию
+	bash scripts/deploy.sh rollback
+
+deploy-status: ## что работает на staging и история выпусков
+	bash scripts/deploy.sh status
+
+release-check: ## п. 7: служебный адрес, версия и основной сценарий на $(RELEASE_URL)
+	$(PYTHON) scripts/release_check.py --url "$(RELEASE_URL)"
+
+release-demo: ## п. 13: образ с ошибкой в локальный registry, KIND=good|broken-health|broken-scenario
+	bash scripts/release_demo.sh "$(KIND)"
 
 # ---- Прочее ------------------------------------------------------------------------
 

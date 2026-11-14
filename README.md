@@ -64,14 +64,21 @@ CI и безопасность (Lab 5):
 `make ci-guard` — страж критических файлов относительно `origin/main`  
 `make ci-demo DEMO=good|defect|delete-test|...` — демонстрационные PR
 
-Подробности о проверках, миграциях и бэкапах: `docs/TESTING.md`, о контейнерах: `docs/CONTAINERS.md`, о CI: `docs/CI.md`.
+Поставка на staging (Lab 6, на сервере от пользователя deploy):
+
+`make deploy TAG=<тег>` — выпустить образ из registry с проверкой и автовозвратом  
+`make deploy-rollback` / `make deploy-status` — возврат предыдущей версии / состояние  
+`make release-check` — служебный адрес, версия и основной сценарий  
+`make release-demo KIND=broken-health|broken-scenario|good` — образ для моделирования неудачного выпуска
+
+Подробности о проверках, миграциях и бэкапах: `docs/TESTING.md`, о контейнерах: `docs/CONTAINERS.md`, о CI: `docs/CI.md`, о поставке: `docs/CD.md`.
 
 ## API
 
 Swagger: `/docs`  
 ReDoc: `/redoc`  
 Health: `/health` (liveness), `/health/ready` (readiness: доступна ли БД)  
-Version: `/version`  
+Version: `/version` (версия и commit образа, экземпляр)  
 Каждый ответ содержит заголовок `X-Instance-Id` — идентификатор экземпляра приложения.
 
 Подробности: `docs/API.md`.

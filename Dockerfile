@@ -43,10 +43,16 @@ COPY alembic ./alembic
 COPY app ./app
 COPY static ./static
 
-# Метки — в конце, чтобы смена версии не пересобирала слои выше.
+# Версия, commit и метки — в конце, чтобы смена версии не пересобирала слои выше.
+# Версия и commit зашиты в образ (Lab 6): /version показывает, какой образ
+# реально запущен, независимо от настроек окружения.
 ARG APP_VERSION=0.0.0
+ARG GIT_SHA=unknown
+ENV APP_VERSION=${APP_VERSION} \
+    APP_COMMIT=${GIT_SHA}
 LABEL org.opencontainers.image.title="auction-system" \
       org.opencontainers.image.version="${APP_VERSION}" \
+      org.opencontainers.image.revision="${GIT_SHA}" \
       org.opencontainers.image.source="https://github.com/nice1ce/auctions"
 
 USER 10001:10001

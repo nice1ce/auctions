@@ -20,10 +20,12 @@ x-logging: &logging
     max-size: "10m"
     max-file: "3"
 
+# Версия приложения (APP_VERSION) и commit (APP_COMMIT) не задаются здесь:
+# они зашиты в образ при сборке, и /version показывает реально запущенный образ.
 x-app-env: &app-env
   APP_NAME: ${APP_NAME:-auction-system}
-  APP_VERSION: ${APP_VERSION:?APP_VERSION не задан (см. .env.example)}
-  ENVIRONMENT: production
+  # Имя окружения: production по умолчанию, staging — из staging.env (Lab 6).
+  ENVIRONMENT: ${DEPLOY_ENVIRONMENT:-production}
   SESSION_TTL_DAYS: ${SESSION_TTL_DAYS:-7}
   COOKIE_SECURE: ${COOKIE_SECURE:-false}
   DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:?POSTGRES_USER не задан}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD не задан (см. .env.example)}@db:5432/${POSTGRES_DB:?POSTGRES_DB не задан}
@@ -117,6 +119,7 @@ services:
       dockerfile: Dockerfile
       args:
         APP_VERSION: ${APP_VERSION:?APP_VERSION не задан}
+        GIT_SHA: ${GIT_SHA:-unknown}
     image: auctions-app:${APP_VERSION:?APP_VERSION не задан}
     command: ["alembic", "upgrade", "head"]
     user: "10001:10001"
@@ -199,9 +202,14 @@ networks:
   frontend:
     driver: bridge
   # Внутренняя сеть: приложение и БД, без маршрута наружу и без публикации портов.
+  # gateway_mode isolated (Docker >= 28): у хоста нет адреса в этой сети, поэтому
+  # даже с самой ВМ нельзя обратиться к приложению или БД по IP контейнера —
+  # только через nginx. Проверяется make container-check.
   backend:
     driver: bridge
     internal: true
+    driver_opts:
+      com.docker.network.bridge.gateway_mode_ipv4: isolated
 
 volumes:
   pgdata:
