@@ -1,0 +1,10 @@
+# Только для локальной разработки (make up / make test / make run на хосте):
+# публикует порт PostgreSQL на 127.0.0.1, чтобы до БД мог достучаться
+# uvicorn/pytest, запущенный вне контейнера. На стенде НЕ используется:
+# make container-up и make container-check работают только с docker-compose.yml.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d db
+services:
+  db:
+    ports:
+      - "127.0.0.1:5432:5432"

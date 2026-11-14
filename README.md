@@ -10,8 +10,19 @@ Python 3.12, FastAPI, SQLAlchemy 2, PostgreSQL, Alembic, Pydantic Settings, pyte
 
 ## Быстрый старт
 
+В контейнерах (Lab 4, ВМ Linux с Docker):
+
 ```bash
-make init   # venv, зависимости, .env, PostgreSQL в Docker, миграции
+cp .env.example .env && make env-password
+make container-up   # container-check -> сборка -> nginx + 2 экземпляра + PostgreSQL
+```
+
+Откройте `http://127.0.0.1:8080`. Подробности: `docs/CONTAINERS.md`.
+
+Разработка на хосте:
+
+```bash
+make init   # venv, зависимости, .env, PostgreSQL в Docker (порт на 127.0.0.1), миграции
 make run
 ```
 
@@ -30,16 +41,29 @@ make run
 `make mutation` — мутационное тестирование бизнес-логики  
 `make backup` / `make restore` — резервная копия и восстановление  
 `make backup-check` — копия → порча данных → восстановление → сверка  
-`make container-check` — базовая проверка Compose
 
-Подробности о проверках, миграциях и бэкапах: `docs/TESTING.md`.
+Контейнерное окружение (Lab 4):
+
+`make container-check` — автоматическая проверка Dockerfile, Compose, образа и стенда  
+`make container-up` — применить изменения окружения (только после container-check)  
+`make container-down` / `make container-ps` / `make container-logs` / `make container-users`  
+`make container-migrate` — миграции Alembic в контейнере  
+`make container-backup` / `make container-restore` — резервная копия и восстановление в контейнере  
+`make container-persistence-check` — данные после пересоздания и обновления образа  
+`make container-stop-check` — корректное завершение по SIGTERM  
+`make container-restore-check` — восстановление БД в новый volume  
+`make container-lb-check` — балансировка, отказ узла, ограничение частоты  
+`make lock` / `make pin-digest` / `make env-password` — lock-файл, digest образов, пароль БД
+
+Подробности о проверках, миграциях и бэкапах: `docs/TESTING.md`, о контейнерах: `docs/CONTAINERS.md`.
 
 ## API
 
 Swagger: `/docs`  
 ReDoc: `/redoc`  
-Health: `/health`  
-Version: `/version`
+Health: `/health` (liveness), `/health/ready` (readiness: доступна ли БД)  
+Version: `/version`  
+Каждый ответ содержит заголовок `X-Instance-Id` — идентификатор экземпляра приложения.
 
 Подробности: `docs/API.md`.
 

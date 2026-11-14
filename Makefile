@@ -1,4 +1,4 @@
-# Auction System — команды разработки (Lab 3).
+# Auction System — команды разработки (Lab 3) и контейнерного окружения (Lab 4).
 # Переменные берутся из .env (создаётся из .env.example командой make setup).
 -include .env
 export
@@ -16,14 +16,28 @@ PG_MAINTENANCE_URL = $(patsubst %/$(DB_NAME),%/postgres,$(PG_URL))
 PG_EXEC ?= docker compose exec -T db
 BACKUP_FILE ?= backups/backup.sql
 
+# Lab 4
+COMPOSE ?= docker compose
+# Для разработки на хосте: тот же compose + публикация 5432 только на 127.0.0.1.
+COMPOSE_DEV = $(COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml
+CONTAINER_CHECK = $(PYTHON) scripts/container_check.py
+CONTAINER_BACKUP ?= backups/container-backup.sql
+# Базовый образ для make lock — тот же, что в Dockerfile.
+PYTHON_IMAGE = $(shell awk '$$1 == "FROM" { print $$2; exit }' Dockerfile)
+
 .PHONY: help setup init up down db-wait run migrate migrate-check db-reset \
 	policy lint format format-check sast test verify mutation \
-	backup restore backup-check container-check clean
+	backup restore backup-check clean \
+	container-check container-up container-down container-ps container-logs \
+	container-users container-migrate container-backup container-restore \
+	container-persistence-check container-stop-check container-restore-check \
+	container-lb-check container-all-checks lock pin-digest env-password \
+	db-password-apply
 
 help:
-	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | sed 's/:.*## /\t/'
+	@grep -hE '^[a-z-]+:.*## ' Makefile | sed 's/:.*## /\t/'
 
-# ---- Установка и запуск -----------------------------------------------------
+# ---- Установка и запуск (разработка на хосте) ----------------------------------
 
 setup: ## venv + зафиксированные зависимости + .env
 	$(PYTHON) -m venv $(VENV)
@@ -34,21 +48,21 @@ setup: ## venv + зафиксированные зависимости + .env
 init: setup up db-wait migrate ## единый сценарий первоначальной настройки
 	@echo "Готово: make run -> http://127.0.0.1:8000"
 
-up: ## поднять PostgreSQL в Docker
-	docker compose up -d db
+up: ## поднять PostgreSQL для разработки (порт только на 127.0.0.1)
+	$(COMPOSE_DEV) up -d db
 
 down:
-	docker compose down
+	$(COMPOSE) down
 
 db-wait:
 	@for i in $$(seq 1 30); do \
 		$(PG_EXEC) pg_isready -q -d "$(PG_URL)" && exit 0; sleep 1; \
 	done; echo "PostgreSQL недоступен"; exit 1
 
-run: ## запустить приложение
+run: ## запустить приложение на хосте
 	$(BIN)/uvicorn app.main:app --reload
 
-# ---- Миграции (п. 8, 9) -----------------------------------------------------
+# ---- Миграции (Lab 3, п. 8, 9) ---------------------------------------------------
 
 migrate: ## применить миграции к рабочей БД
 	$(BIN)/alembic upgrade head
@@ -63,7 +77,7 @@ db-reset: ## пересоздать ЧИСТУЮ рабочую БД и прим
 	$(PG_EXEC) createdb --maintenance-db="$(PG_MAINTENANCE_URL)" $(DB_NAME)
 	$(BIN)/alembic upgrade head
 
-# ---- Проверки (п. 7, 13, 14) ------------------------------------------------
+# ---- Проверки (Lab 3, п. 7, 13, 14) ----------------------------------------------
 
 policy: ## запрет пропуска тестов, снижения порогов и исключений без обоснования
 	$(BIN)/python scripts/check_policy.py
@@ -89,7 +103,7 @@ verify: policy lint format-check sast test ## весь обязательный 
 mutation: ## мутационное тестирование бизнес-логики (несколько минут)
 	$(BIN)/python scripts/mutation_check.py
 
-# ---- Резервное копирование (п. 11, 12) ----------------------------------------
+# ---- Резервное копирование (Lab 3, п. 11, 12) ------------------------------------
 
 backup: ## резервная копия рабочей БД в $(BACKUP_FILE)
 	@mkdir -p "$(dir $(BACKUP_FILE))"
@@ -103,13 +117,86 @@ restore: ## восстановить рабочую БД из $(BACKUP_FILE) (о
 	@echo "Восстановлено из $(BACKUP_FILE)"
 
 backup-check: ## сценарий: копия -> порча данных -> восстановление -> сверка
-	scripts/backup_restore_check.sh
+	bash scripts/backup_restore_check.sh
 
-# ---- Прочее -------------------------------------------------------------------
+# ---- Контейнерное окружение (Lab 4) ----------------------------------------------
+# Правило п. 14: окружение изменяется ТОЛЬКО через make container-up, который
+# сначала выполняет container-check и не применяет изменения при нарушениях.
 
-container-check:
-	docker compose config
-	docker compose ps
+container-check: ## п. 12: проверка Dockerfile, Compose, образа и запущенного стенда
+	$(CONTAINER_CHECK)
+
+container-up: ## п. 14: container-check -> docker compose up -> проверка стенда
+	$(CONTAINER_CHECK) --skip-runtime
+	$(COMPOSE) up -d --remove-orphans
+	$(CONTAINER_CHECK) --runtime-only --wait 180
+	@echo "Стенд: http://127.0.0.1:$${HTTP_PORT:-8080}"
+
+container-down: ## остановить стенд (контейнеры удаляются, volume с БД остаётся)
+	$(COMPOSE) down
+
+container-ps: ## состояние контейнеров
+	$(COMPOSE) ps --all
+
+container-logs: ## журналы всех контейнеров
+	$(COMPOSE) logs --tail=100
+
+container-users: ## от какого пользователя работают процессы в контейнерах
+	@for s in db app1 app2 nginx; do \
+		printf '%-6s %s\n' "$$s" "$$($(COMPOSE) exec -T $$s id)"; \
+	done
+	@for s in db app1 app2 nginx; do \
+		echo "--- $$s (uid процессов)"; \
+		docker top "$$($(COMPOSE) ps -q $$s)" -eo uid,pid,comm; \
+	done
+
+container-migrate: ## п. 10: миграции Alembic в контейнере (upgrade head)
+	$(COMPOSE) run --rm migrate
+
+container-backup: ## п. 10: pg_dump внутри контейнера db -> $(CONTAINER_BACKUP)
+	bash scripts/container_db.sh backup "$(CONTAINER_BACKUP)"
+
+container-restore: ## п. 10: восстановить БД в контейнере из $(CONTAINER_BACKUP)
+	bash scripts/container_db.sh restore "$(CONTAINER_BACKUP)"
+
+container-persistence-check: ## п. 9: данные после пересоздания и обновления образа
+	bash scripts/container_persistence_check.sh
+
+container-stop-check: ## п. 5: корректное завершение по SIGTERM (exit 0)
+	bash scripts/container_stop_check.sh app1
+
+container-restore-check: ## п. 10: восстановление БД в НОВЫЙ volume
+	bash scripts/container_restore_check.sh
+
+container-lb-check: ## доп.: балансировка, отказ узла, ограничение частоты
+	bash scripts/container_lb_check.sh
+
+container-all-checks: container-up container-stop-check container-lb-check container-persistence-check ## все сценарии, кроме восстановления в новый volume
+
+lock: ## пересобрать requirements.lock в базовом образе из Dockerfile
+	docker run --rm --user "$$(id -u):$$(id -g)" -e HOME=/tmp -v "$(CURDIR)":/src -w /src \
+		$(PYTHON_IMAGE) sh -c '\
+		python -m venv /tmp/venv && \
+		/tmp/venv/bin/pip install -q --disable-pip-version-check --only-binary=:all: -r requirements-runtime.txt && \
+		{ sed -n "1,3p" requirements.lock; /tmp/venv/bin/pip freeze; } > /tmp/requirements.lock && \
+		cp /tmp/requirements.lock requirements.lock'
+	@echo "requirements.lock обновлён"
+
+pin-digest: ## показать digest используемых образов для фиксации (image@sha256:...)
+	@for image in $$($(COMPOSE) config --images | grep -v '^auctions-app:') $(PYTHON_IMAGE); do \
+		docker pull -q "$$image" > /dev/null && \
+		docker image inspect --format '{{index .RepoDigests 0}}' "$$image"; \
+	done
+
+env-password: ## сгенерировать стойкий пароль БД в .env
+	$(PYTHON) scripts/set_db_password.py
+
+db-password-apply: ## применить пароль из .env к уже инициализированной БД
+	@printf "ALTER USER \"%s\" PASSWORD '%s';\n" "$$POSTGRES_USER" "$$POSTGRES_PASSWORD" \
+		| $(COMPOSE) exec -T db psql -X -q -U "$$POSTGRES_USER" -d postgres
+	@echo "Пароль в БД обновлён. Пересоздайте контейнеры: make container-up"
+
+# ---- Прочее ------------------------------------------------------------------------
 
 clean:
 	rm -rf reports .pytest_cache .ruff_cache .coverage
