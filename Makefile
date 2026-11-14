@@ -39,6 +39,19 @@ GUARD_BASE ?= origin/main
 # Lab 6: поставка на staging
 DEPLOY_ROOT ?= /srv/auctions-staging
 RELEASE_URL ?= http://127.0.0.1:8081
+# Lab 7: управление конфигурацией (Ansible)
+ENV ?= staging
+INFRA_DIR := infra/ansible
+INFRA_VENV ?= .venv-infra
+INFRA_BIN := $(if $(wildcard $(INFRA_VENV)/bin/ansible-playbook),$(INFRA_VENV)/bin/,)
+INFRA_ENV = ANSIBLE_CONFIG=$(INFRA_DIR)/ansible.cfg PATH="$(abspath $(INFRA_VENV))/bin:$$PATH"
+INFRA_PLAY = $(INFRA_ENV) $(INFRA_BIN)ansible-playbook \
+	-i $(INFRA_DIR)/inventories/common.yml -i $(INFRA_DIR)/inventories/$(ENV) \
+	--vault-id $(ENV)@$(INFRA_DIR)/vault-pass-client.sh $(INFRA_ARGS)
+# Дополнительные параметры ansible-playbook, например INFRA_ARGS="--limit prod-vm --tags ssh"
+INFRA_ARGS ?=
+# Как bootstrap получает пароль sudo пользователя установщика (по умолчанию — спросит).
+INFRA_BECOME ?= --ask-become-pass
 
 .PHONY: help setup init up down db-wait run migrate migrate-check db-reset \
 	policy lint format format-check sast test verify mutation \
@@ -49,7 +62,9 @@ RELEASE_URL ?= http://127.0.0.1:8081
 	container-lb-check container-all-checks lock pin-digest env-password \
 	db-password-apply migrate-roundtrip deps-audit secrets-scan image-scan \
 	registry-up registry-down image-publish ci ci-guard ci-demo \
-	deploy deploy-rollback deploy-status release-check release-demo
+	deploy deploy-rollback deploy-status release-check release-demo \
+	infra-setup infra-lint infra-policy infra-vault-init infra-vault-edit \
+	infra-known-hosts infra-bootstrap infra-check infra-apply infra-verify infra-test
 
 help:
 	@grep -hE '^[a-z-]+:.*## ' Makefile | sed 's/:.*## /\t/'
@@ -272,6 +287,46 @@ release-check: ## п. 7: служебный адрес, версия и осно
 
 release-demo: ## п. 13: образ с ошибкой в локальный registry, KIND=good|broken-health|broken-scenario
 	bash scripts/release_demo.sh "$(KIND)"
+
+# ---- Управление конфигурацией (Lab 7) ----------------------------------------------
+# Окружение выбирается ENV=staging|production. Подробно: docs/INFRA.md.
+
+infra-setup: ## Ansible и линтеры в $(INFRA_VENV) + коллекции (зафиксированные версии)
+	$(PYTHON) -m venv $(INFRA_VENV)
+	$(INFRA_VENV)/bin/pip install -q -r $(INFRA_DIR)/requirements.txt
+	$(INFRA_ENV) $(INFRA_VENV)/bin/ansible-galaxy collection install -r $(INFRA_DIR)/requirements.yml -p $(INFRA_DIR)/collections
+
+infra-lint: ## п. 12: yamllint + ansible-lint (профиль production)
+	cd $(INFRA_DIR) && $(if $(INFRA_BIN),$(abspath $(INFRA_VENV))/bin/,)yamllint -s .
+	cd $(INFRA_DIR) && $(if $(INFRA_BIN),$(abspath $(INFRA_VENV))/bin/,)ansible-lint
+
+infra-policy: ## п. 9, 12: политика IaC (секреты, порты, права, команды, версии)
+	$(if $(INFRA_BIN),$(INFRA_VENV)/bin/python,$(PYTHON)) scripts/infra_policy.py
+
+infra-vault-init: ## п. 9: создать зашифрованный vault.yml окружения ENV (DB_PASSWORD=, REGISTRY_TOKEN=)
+	$(INFRA_ENV) bash $(INFRA_DIR)/vault-init.sh "$(ENV)"
+
+infra-vault-edit: ## п. 9: изменить секреты окружения ENV (файл остаётся зашифрованным)
+	$(INFRA_ENV) $(INFRA_BIN)ansible-vault edit --vault-id $(ENV)@$(INFRA_DIR)/vault-pass-client.sh \
+		$(INFRA_DIR)/inventories/$(ENV)/group_vars/$(ENV)/vault.yml
+
+infra-known-hosts: ## ключи SSH узлов окружения ENV -> inventories/ENV/known_hosts (сверить с консолью!)
+	$(INFRA_ENV) bash $(INFRA_DIR)/known-hosts.sh "$(ENV)"
+
+infra-bootstrap: ## п. 3: первый запуск на чистой ВМ от пользователя установщика (спросит пароль sudo)
+	$(INFRA_PLAY) $(INFRA_DIR)/playbooks/bootstrap.yml $(INFRA_BECOME)
+
+infra-check: ## п. 7: что изменится на узлах ENV (--check --diff, без изменений)
+	$(INFRA_PLAY) $(INFRA_DIR)/playbooks/site.yml --check --diff --skip-tags verify
+
+infra-apply: ## п. 4–8: применить конфигурацию к узлам ENV (RUNNER_TOKEN= — регистрация runner)
+	$(INFRA_PLAY) $(INFRA_DIR)/playbooks/site.yml
+
+infra-verify: ## п. 10: только проверка узлов ENV (порты, sshd, firewall, права, приложение)
+	$(INFRA_PLAY) $(INFRA_DIR)/playbooks/verify.yml
+
+infra-test: ## п. 7, 8: роли на одноразовом узле — настройка, changed=0, восстановление дрейфа
+	$(INFRA_ENV) bash infra/test/run.sh
 
 # ---- Прочее ------------------------------------------------------------------------
 

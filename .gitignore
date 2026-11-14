@@ -13,3 +13,7 @@ backups/
 *.log
 
 reports/
+
+# Lab 7: Ansible (venv и коллекции ставит make infra-setup)
+.venv-infra/
+infra/ansible/collections/

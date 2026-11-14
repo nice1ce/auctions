@@ -71,7 +71,16 @@ CI и безопасность (Lab 5):
 `make release-check` — служебный адрес, версия и основной сценарий  
 `make release-demo KIND=broken-health|broken-scenario|good` — образ для моделирования неудачного выпуска
 
-Подробности о проверках, миграциях и бэкапах: `docs/TESTING.md`, о контейнерах: `docs/CONTAINERS.md`, о CI: `docs/CI.md`, о поставке: `docs/CD.md`.
+Управление конфигурацией узлов (Lab 7, Ansible, `ENV=staging|production`):
+
+`make infra-setup` — Ansible, линтеры и коллекции зафиксированных версий  
+`make infra-lint` / `make infra-policy` — ansible-lint (production) и политика IaC  
+`make infra-test` — роли на одноразовом узле: настройка, повтор без изменений, восстановление ручных правок  
+`make infra-vault-init` / `make infra-vault-edit` — зашифрованные секреты окружения  
+`make infra-known-hosts` / `make infra-bootstrap` — ключи узлов и первый запуск на чистой ВМ  
+`make infra-check` / `make infra-apply` / `make infra-verify` — что изменится / применить / проверить узлы
+
+Подробности о проверках, миграциях и бэкапах: `docs/TESTING.md`, о контейнерах: `docs/CONTAINERS.md`, о CI: `docs/CI.md`, о поставке: `docs/CD.md`, об управлении конфигурацией: `docs/INFRA.md`.
 
 ## API
 
