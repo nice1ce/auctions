@@ -1,0 +1,40 @@
+# Страж критических файлов приёмки (Lab 5, п. 13–15).
+#
+# pull_request_target: workflow и scripts/ci_guard.py берутся из ОСНОВНОЙ
+# ветки, поэтому PR не может отключить или ослабить стража (изменения guard.yml
+# в PR вступят в силу только после слияния — и сами требуют подтверждения).
+# Код PR только читается через git show и НЕ выполняется, секретов нет,
+# права — только чтение.
+
+name: guard
+
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    name: guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout основной ветки (код стража)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Получить коммиты PR (без checkout и без выполнения)
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: git fetch --no-tags origin "+refs/pull/${PR_NUMBER}/head:refs/remotes/pr/head"
+      - name: Проверка критических файлов
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: python3 scripts/ci_guard.py --base "$BASE_SHA" --head "$HEAD_SHA"
