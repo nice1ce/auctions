@@ -1,0 +1,19 @@
+# Поиск секретов (Lab 5, п. 12): стандартные правила gitleaks + исключения.
+# Файл критический (CODEOWNERS): расширение исключений ослабляет проверку,
+# поэтому страж (scripts/ci_guard.py) требует для этого явного подтверждения.
+
+title = "auctions gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Сгенерированные отчёты и заведомо тестовые значения"
+paths = [
+  # HTML/XML-отчёты покрытия, когда-то закоммиченные в репозиторий
+  '''^reports/''',
+]
+regexes = [
+  # Пароли-фикстуры тестов авторизации и заглушка из .env.example
+  '''correct-horse|another-pass|right-password|wrong-password|change-me-please''',
+]

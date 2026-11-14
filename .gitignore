@@ -11,3 +11,5 @@ backups/
 .idea/
 .vscode/
 *.log
+
+reports/

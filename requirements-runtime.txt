@@ -7,3 +7,6 @@ psycopg[binary]==3.2.3
 pydantic-settings==2.7.1
 sqlalchemy==2.0.37
 uvicorn[standard]==0.34.0
+# Транзитивная зависимость uvicorn, зафиксирована явно: версии < 0.16.0
+# уязвимы к request smuggling (CVE-2025-43859, CRITICAL).
+h11==0.16.0

@@ -1,4 +1,5 @@
-# Auction System — команды разработки (Lab 3) и контейнерного окружения (Lab 4).
+# Auction System — команды разработки (Lab 3), контейнеров (Lab 4) и CI (Lab 5).
+# CI (.github/workflows/ci.yml) вызывает эти же цели — локально и в CI одни команды.
 # Переменные берутся из .env (создаётся из .env.example командой make setup).
 -include .env
 export
@@ -20,10 +21,18 @@ BACKUP_FILE ?= backups/backup.sql
 COMPOSE ?= docker compose
 # Для разработки на хосте: тот же compose + публикация 5432 только на 127.0.0.1.
 COMPOSE_DEV = $(COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml
-CONTAINER_CHECK = $(PYTHON) scripts/container_check.py
+CONTAINER_CHECK = $(PYTHON) scripts/container_check.py $(CONTAINER_CHECK_FLAGS)
+# В CI образ собирается отдельной стадией: CONTAINER_CHECK_FLAGS=--no-build
+CONTAINER_CHECK_FLAGS ?=
 CONTAINER_BACKUP ?= backups/container-backup.sql
 # Базовый образ для make lock — тот же, что в Dockerfile.
 PYTHON_IMAGE = $(shell awk '$$1 == "FROM" { print $$2; exit }' Dockerfile)
+
+# Lab 5: инструменты безопасности (версии зафиксированы) и публикация образа
+GITLEAKS_IMAGE = ghcr.io/gitleaks/gitleaks:v8.21.2
+IMAGE ?= auctions-app:$(APP_VERSION)
+REGISTRY ?= localhost:5000
+GUARD_BASE ?= origin/main
 
 .PHONY: help setup init up down db-wait run migrate migrate-check db-reset \
 	policy lint format format-check sast test verify mutation \
@@ -32,7 +41,8 @@ PYTHON_IMAGE = $(shell awk '$$1 == "FROM" { print $$2; exit }' Dockerfile)
 	container-users container-migrate container-backup container-restore \
 	container-persistence-check container-stop-check container-restore-check \
 	container-lb-check container-all-checks lock pin-digest env-password \
-	db-password-apply
+	db-password-apply migrate-roundtrip deps-audit secrets-scan image-scan \
+	registry-up registry-down image-publish ci ci-guard ci-demo
 
 help:
 	@grep -hE '^[a-z-]+:.*## ' Makefile | sed 's/:.*## /\t/'
@@ -72,6 +82,12 @@ migrate-check: ## обновить БД с данными до head и свер�
 	$(BIN)/alembic upgrade head
 	$(BIN)/alembic check
 
+migrate-roundtrip: ## Lab 5: все миграции вниз до base и снова до head + сверка схемы
+	$(BIN)/alembic upgrade head
+	$(BIN)/alembic downgrade base
+	$(BIN)/alembic upgrade head
+	$(BIN)/alembic check
+
 db-reset: ## пересоздать ЧИСТУЮ рабочую БД и применить все миграции
 	$(PG_EXEC) dropdb --if-exists --force --maintenance-db="$(PG_MAINTENANCE_URL)" $(DB_NAME)
 	$(PG_EXEC) createdb --maintenance-db="$(PG_MAINTENANCE_URL)" $(DB_NAME)
@@ -82,18 +98,22 @@ db-reset: ## пересоздать ЧИСТУЮ рабочую БД и прим
 policy: ## запрет пропуска тестов, снижения порогов и исключений без обоснования
 	$(BIN)/python scripts/check_policy.py
 
-lint: ## линтер
+lint: ## линтер (отчёт: reports/ruff.xml)
+	@mkdir -p reports
+	$(BIN)/ruff check --exit-zero --output-format junit --output-file reports/ruff.xml .
 	$(BIN)/ruff check .
 
-format-check: ## проверка форматирования
-	$(BIN)/black --check .
+format-check: ## проверка форматирования (отчёт: reports/black.diff)
+	@mkdir -p reports
+	$(BIN)/black --check --diff . > reports/black.diff 2>&1 || { cat reports/black.diff; exit 1; }
 
 format: ## автоформатирование
 	$(BIN)/black .
 	$(BIN)/ruff check --fix .
 
-sast: ## статический анализ безопасности
-	$(BIN)/bandit -r app alembic scripts
+sast: ## статический анализ безопасности (отчёт: reports/bandit.json)
+	@mkdir -p reports
+	$(BIN)/bandit -q -r app alembic scripts -f json -o reports/bandit.json || { $(BIN)/bandit -r app alembic scripts; exit 1; }
 
 test: ## unit + интеграционные тесты на тестовой БД, отчёты в reports/
 	$(BIN)/pytest
@@ -195,6 +215,37 @@ db-password-apply: ## применить пароль из .env к уже ини
 	@printf "ALTER USER \"%s\" PASSWORD '%s';\n" "$$POSTGRES_USER" "$$POSTGRES_PASSWORD" \
 		| $(COMPOSE) exec -T db psql -X -q -U "$$POSTGRES_USER" -d postgres
 	@echo "Пароль в БД обновлён. Пересоздайте контейнеры: make container-up"
+
+# ---- CI и безопасность (Lab 5) -----------------------------------------------------
+
+deps-audit: ## п. 12: уязвимости зависимостей образа и окружения (pip-audit)
+	$(PYTHON) scripts/vuln_gate.py deps --python $(BIN)/python
+
+secrets-scan: ## п. 12: поиск секретов во всей истории git (gitleaks)
+	@mkdir -p reports
+	docker run --rm --user "$$(id -u):$$(id -g)" -e HOME=/tmp -v "$(CURDIR)":/repo $(GITLEAKS_IMAGE) \
+		git --no-banner --redact --config /repo/.gitleaks.toml \
+		--report-format sarif --report-path /repo/reports/gitleaks.sarif /repo
+
+image-scan: ## п. 12: анализ образа $(IMAGE) (Trivy): CRITICAL с исправлением — провал
+	$(PYTHON) scripts/vuln_gate.py image "$(IMAGE)"
+
+registry-up: ## локальный Docker Registry с паролем на $(REGISTRY)
+	bash scripts/local_registry.sh up
+
+registry-down: ## остановить локальный Docker Registry (данные остаются в volume)
+	bash scripts/local_registry.sh down
+
+image-publish: ## п. 9: опубликовать $(IMAGE) в $(REGISTRY) с тегами версии и commit SHA
+	bash scripts/local_registry.sh publish "$(IMAGE)"
+
+ci: verify migrate-check migrate-roundtrip backup-check deps-audit secrets-scan container-check ## все обязательные проверки pipeline локально
+
+ci-guard: ## п. 15: страж критических файлов — сравнение с $(GUARD_BASE)
+	$(PYTHON) scripts/ci_guard.py --base "$(GUARD_BASE)" --head HEAD
+
+ci-demo: ## п. 15–16: демонстрационная ветка, DEMO=good|defect|delete-test|skip-test|lower-coverage|disable-check|weaken-lint
+	bash scripts/ci_demo.sh "$(DEMO)"
 
 # ---- Прочее ------------------------------------------------------------------------
 

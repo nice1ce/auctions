@@ -55,7 +55,16 @@ make run
 `make container-lb-check` — балансировка, отказ узла, ограничение частоты  
 `make lock` / `make pin-digest` / `make env-password` — lock-файл, digest образов, пароль БД
 
-Подробности о проверках, миграциях и бэкапах: `docs/TESTING.md`, о контейнерах: `docs/CONTAINERS.md`.
+CI и безопасность (Lab 5):
+
+`make ci` — все обязательные проверки pipeline локально  
+`make deps-audit` / `make secrets-scan` / `make image-scan` — зависимости, секреты, образ  
+`make migrate-roundtrip` — миграции вниз до base и обратно  
+`make registry-up` / `make image-publish` — локальный Docker Registry и публикация образа  
+`make ci-guard` — страж критических файлов относительно `origin/main`  
+`make ci-demo DEMO=good|defect|delete-test|...` — демонстрационные PR
+
+Подробности о проверках, миграциях и бэкапах: `docs/TESTING.md`, о контейнерах: `docs/CONTAINERS.md`, о CI: `docs/CI.md`.
 
 ## API
 
